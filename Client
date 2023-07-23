@@ -1,0 +1,112 @@
+package chapter33;
+
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.BorderPane;
+import javafx.stage.Stage;
+
+import java.io.*;
+import java.net.Socket;
+
+public class Client extends Application {
+    // IO streams
+    DataOutputStream toServer = null;
+    DataInputStream fromServer = null;
+
+    @Override
+    public void start(Stage primaryStage) {
+        // Panel p to hold the label and text field
+        BorderPane paneForTextField = new BorderPane();
+        paneForTextField.setPadding(new Insets(5, 5, 5, 5));
+        paneForTextField.setStyle("-fx-border-color: green");
+        paneForTextField.setLeft(new Label("Enter a number: "));
+        TextField tf = new TextField();
+        tf.setAlignment(Pos.BOTTOM_RIGHT);
+        paneForTextField.setCenter(tf);
+
+        BorderPane mainPane = new BorderPane();
+        // Text area to display contents
+        TextArea ta = new TextArea();
+        mainPane.setCenter(new ScrollPane(ta));
+        mainPane.setTop(paneForTextField);
+
+        // Create a scene and place it in the stage
+        Scene scene = new Scene(mainPane, 450, 200);
+        primaryStage.setTitle("Prime Number Client"); // Set the stage title
+        primaryStage.setScene(scene); // Place the scene in the stage
+        primaryStage.show(); // Display the stage
+
+        // Connect to the server
+        connectToServer(ta);
+
+        // Create a task for reading data from the server
+        Task<Void> readTask = new Task<Void>() {
+            @Override
+            protected Void call() {
+                while (true) {
+                    try {
+                        // Get response from the server
+                        boolean isPrime = fromServer.readBoolean();
+
+                        // Display the result to the text area
+                        Platform.runLater(() -> {
+                            ta.appendText("Number is " + tf.getText() + "\n");
+                            ta.appendText("Is the number prime? " + (isPrime ? "Yes" : "No") + "\n");
+                        });
+                    } catch (IOException ex) {
+                        // Handle connection error gracefully
+                        Platform.runLater(() -> ta.appendText("Connection error: " + ex.getMessage() + "\n"));
+                        break;
+                    }
+                }
+                return null;
+            }
+        };
+
+        // Start the read task in a new thread
+        Thread readThread = new Thread(readTask);
+        readThread.setDaemon(true);
+        readThread.start();
+
+        tf.setOnAction(e -> {
+            try {
+                // Get the number from the text field
+                int number = Integer.parseInt(tf.getText().trim());
+
+                // Send the number to the server
+                toServer.writeInt(number);
+                toServer.flush();
+            } catch (IOException ex) {
+                // Handle connection error gracefully
+                ta.appendText("Connection error: " + ex.getMessage() + "\n");
+            }
+        });
+    }
+
+    private void connectToServer(TextArea ta) {
+        try {
+            // Create a socket to connect to the server
+            Socket socket = new Socket("localhost", 12345);
+            // Create an input stream to receive data from the server
+            fromServer = new DataInputStream(socket.getInputStream());
+            // Create an output stream to send data to the server
+            toServer = new DataOutputStream(socket.getOutputStream());
+        } catch (IOException ex) {
+            ta.appendText("Connection error: " + ex.toString() + '\n');
+        }
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+
+
